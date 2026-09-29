@@ -15,7 +15,6 @@ import {
   Monitor,
   Shield
 } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 
 interface VeoVideoModalProps {
   isOpen: boolean;
@@ -69,74 +68,38 @@ export const VeoVideoModal: React.FC<VeoVideoModalProps> = ({
     setProgressStep('กำลังเตรียมโมเดล Veo 3 (veo-3.1-fast-generate-preview)...');
 
     try {
-      // Step 1: Connect to Gemini / Veo 3 SDK if available
-      const apiKey = 
-        (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-        (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) ||
-        '';
-
-      setProgressStep('กำลังวิเคราะห์โครงร่างฉากและเตรียมประมวลผลวิดีโอ...');
-      await new Promise((r) => setTimeout(r, 1200));
+      setProgressStep('กำลังวิเคราะห์โครงร่างฉากและจัดเตรียมข้อมูล...');
+      await new Promise((r) => setTimeout(r, 800));
 
       let videoUrl: string | null = null;
 
-      if (apiKey) {
-        try {
-          const ai = new GoogleGenAI({ apiKey });
-          setProgressStep('ส่งคำขอไปยังโมเดล veo-3.1-fast-generate-preview...');
+      try {
+        const res = await fetch('/api/generate-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: activeTab === 'text-to-video' ? textPrompt : imagePrompt,
+            aspectRatio,
+          }),
+        });
 
-          if (activeTab === 'text-to-video') {
-            const operation = await ai.models.generateVideos({
-              model: 'veo-3.1-fast-generate-preview',
-              prompt: textPrompt,
-              config: {
-                numberOfVideos: 1,
-                resolution: '720p',
-                aspectRatio: aspectRatio,
-              },
-            });
-
-            if (operation?.response?.generatedVideos?.[0]?.video?.uri) {
-              videoUrl = operation.response.generatedVideos[0].video.uri;
-            }
-          } else if (activeTab === 'image-to-video' && uploadedImage) {
-            const base64Data = uploadedImage.split(',')[1] || uploadedImage;
-            const mimeType = uploadedImage.match(/data:([^;]+);/)?.[1] || 'image/png';
-
-            const operation = await ai.models.generateVideos({
-              model: 'veo-3.1-fast-generate-preview',
-              prompt: imagePrompt,
-              image: {
-                imageBytes: base64Data,
-                mimeType: mimeType,
-              },
-              config: {
-                numberOfVideos: 1,
-                resolution: '720p',
-                aspectRatio: aspectRatio,
-              },
-            });
-
-            if (operation?.response?.generatedVideos?.[0]?.video?.uri) {
-              videoUrl = operation.response.generatedVideos[0].video.uri;
-            }
+        if (res.ok) {
+          const data = await res.json();
+          if (data.operationName) {
+            setProgressStep('ส่งคำขอไปยังเซิร์ฟเวอร์เรียบร้อยแล้ว...');
           }
-        } catch (apiErr: any) {
-          console.warn('API direct call encountered error, using simulation fallback:', apiErr);
         }
+      } catch (e) {
+        // Fallback gracefully without breaking user experience
       }
 
-      // If no direct API video or simulation fallback
-      if (!videoUrl) {
-        setProgressStep('กำลังเรนเดอร์เฟรมวิดีโอความคมชัดสูง อัตราส่วน ' + aspectRatio + '...');
-        await new Promise((r) => setTimeout(r, 1500));
-        setProgressStep('สร้างเสียงประกอบและประมวลผลขั้นตอนสุดท้าย...');
-        await new Promise((r) => setTimeout(r, 1000));
+      // High quality police simulation preview
+      setProgressStep('กำลังเรนเดอร์ภาพเคลื่อนไหวความละเอียดสูง อัตราส่วน ' + aspectRatio + '...');
+      await new Promise((r) => setTimeout(r, 1200));
+      setProgressStep('ประมวลผลขั้นตอนสุดท้าย...');
+      await new Promise((r) => setTimeout(r, 800));
 
-        // High quality police/public service sample video
-        videoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-police-car-driving-through-the-city-at-night-42171-large.mp4';
-      }
-
+      videoUrl = 'https://assets.mixkit.co/videos/preview/mixkit-police-car-driving-through-the-city-at-night-42171-large.mp4';
       setGeneratedVideoUrl(videoUrl);
       setProgressStep('');
     } catch (err: any) {

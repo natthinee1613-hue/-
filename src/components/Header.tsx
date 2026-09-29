@@ -12,7 +12,9 @@ import {
   Sun,
   Moon,
   Video,
-  Sparkles
+  Sparkles,
+  Globe,
+  UploadCloud
 } from 'lucide-react';
 import { getCurrentOfficerName, setCurrentOfficerName } from '../utils/auditLogger';
 import { MaroonAnimatedBackground } from './MaroonAnimatedBackground';
@@ -23,6 +25,10 @@ interface HeaderProps {
   onOpenAuditModal: () => void;
   onOpenPrintModal: () => void;
   onOpenVeoModal: () => void;
+  onOpenPublishModal: () => void;
+  hasUnpublishedChanges: boolean;
+  serverVersion: number;
+  serverLastPublishedAt: string | null;
   onExportExcel: () => void;
   onDownloadTemplate: () => void;
   onResetData: () => void;
@@ -38,6 +44,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuditModal,
   onOpenPrintModal,
   onOpenVeoModal,
+  onOpenPublishModal,
+  hasUnpublishedChanges,
+  serverVersion,
+  serverLastPublishedAt,
   onExportExcel,
   onDownloadTemplate,
   onResetData,
@@ -70,6 +80,27 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="border-b border-rose-950/60 bg-black/40 backdrop-blur-md py-1.5 px-3 sm:px-6 relative z-10">
         <div className="max-w-[1600px] mx-auto flex items-center justify-end gap-2 text-xs">
           <div className="flex items-center gap-2">
+            {/* Live Web Sync Status Pill */}
+            <button
+              onClick={onOpenPublishModal}
+              title={hasUnpublishedChanges ? 'มีข้อมูลในตารางรอเผยแพร่ลงเว็ป คลิกเพื่อบันทึกและเผยแพร่' : 'ข้อมูลในเครื่องซิงค์ตรงกับเว็ปล่าสุดแล้ว คลิกเพื่อดูรายละเอียดหรือจัดการ'}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer shadow-xs font-['Sarabun'] ${
+                hasUnpublishedChanges
+                  ? 'bg-amber-950/85 hover:bg-amber-900 border-amber-500/60 text-amber-200'
+                  : 'bg-emerald-950/75 hover:bg-emerald-900 border-emerald-500/50 text-emerald-200'
+              }`}
+            >
+              <Globe className={`w-3.5 h-3.5 ${hasUnpublishedChanges ? 'text-amber-400' : 'text-emerald-400'}`} />
+              <span className="font-medium hidden sm:inline">
+                {hasUnpublishedChanges ? 'เว็ป: รอเผยแพร่' : `เว็ป: ซิงค์แล้ว (v${serverVersion || 1})`}
+              </span>
+              {hasUnpublishedChanges ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block" />
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+              )}
+            </button>
+
             {/* Current Officer Badge */}
             <div className="relative">
               {isEditingOfficer ? (
@@ -259,6 +290,23 @@ export const Header: React.FC<HeaderProps> = ({
               className="p-1.5 rounded-lg border border-rose-900/60 bg-[#3b0810]/80 hover:bg-[#540d17] hover:border-rose-400/50 text-rose-200 hover:text-white transition-colors cursor-pointer shadow-xs"
             >
               <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Web Publish Action Button */}
+            <button
+              onClick={onOpenPublishModal}
+              title="บันทึกและเผยแพร่ข้อมูลตารางลงเว็ป เพื่อให้ทุกคนที่เปิดเว็ปไซต์เห็นข้อมูลล่าสุด"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-md ${
+                hasUnpublishedChanges
+                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white border-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
+                  : 'border-rose-900/60 bg-[#3b0810]/80 hover:bg-[#540d17] hover:border-rose-400/50 text-rose-100 hover:text-white'
+              }`}
+            >
+              <UploadCloud className="w-3.5 h-3.5 text-emerald-300" />
+              <span>เผยแพร่ลงเว็ป</span>
+              {hasUnpublishedChanges && (
+                <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping ml-0.5" />
+              )}
             </button>
 
             {/* Primary Action Button: + เพิ่มรายการ */}

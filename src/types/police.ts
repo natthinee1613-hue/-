@@ -65,7 +65,7 @@ export interface PolicePositionRecord {
   updatedBy: string; // ชื่อเจ้าหน้าที่ผู้แก้ไข
 }
 
-export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT_EXCEL' | 'BATCH_DELETE' | 'RESET_DATA';
+export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'IMPORT_EXCEL' | 'BATCH_DELETE' | 'RESET_DATA' | 'PUBLISH_TO_WEB';
 
 export interface AuditLogItem {
   id: string;
