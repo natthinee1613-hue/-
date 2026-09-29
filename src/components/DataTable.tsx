@@ -62,128 +62,6 @@ export const DataTable: React.FC<DataTableProps> = ({
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [inlineFormData, setInlineFormData] = useState<Partial<PolicePositionRecord>>({});
 
-  // Quick single-click status badge editor for any order
-  const [quickStatusRecordId, setQuickStatusRecordId] = useState<string | null>(null);
-  const [customStatusInput, setCustomStatusInput] = useState<string>('');
-
-  const STANDARD_POLICE_STATUSES = [
-    { label: 'บรรจุแล้ว', dot: 'bg-emerald-500', color: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' },
-    { label: 'รอดำเนินการ', dot: 'bg-amber-500', color: 'bg-amber-50 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-700' },
-    { label: 'ไล่ออก', dot: 'bg-red-500', color: 'bg-red-50 text-red-800 dark:bg-red-950/70 dark:text-red-300 border-red-300 dark:border-red-700' },
-    { label: 'รอสั่งให้ออกฯ', dot: 'bg-orange-500', color: 'bg-orange-50 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300 border-orange-300 dark:border-orange-700' },
-    { label: 'ลาออกจากราชการ', dot: 'bg-rose-500', color: 'bg-rose-50 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-300 dark:border-rose-700' },
-    { label: 'ตำแหน่งว่าง', dot: 'bg-indigo-400', color: 'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700' },
-    { label: 'กันตำแหน่งแล้ว', dot: 'bg-teal-500', color: 'bg-teal-50 text-teal-800 dark:bg-teal-950/70 dark:text-teal-300 border-teal-300 dark:border-teal-700' },
-    { label: 'สั่งพักราชการ', dot: 'bg-purple-500', color: 'bg-purple-50 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border-purple-300 dark:border-purple-700' },
-    { label: 'ตัดโอนแล้ว', dot: 'bg-cyan-500', color: 'bg-cyan-50 text-cyan-800 dark:bg-cyan-950/70 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700' },
-    { label: 'ปฏิบัติราชการ', dot: 'bg-emerald-500', color: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700' },
-  ];
-
-  const renderQuickStatusPopover = (rec: PolicePositionRecord) => (
-    <div
-      className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-1.5 w-72 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-2xl text-left font-['Sarabun'] animate-in fade-in-50 zoom-in-95"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
-          <span>👮 สถานะสากล (มาตรฐาน ตร.)</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setQuickStatusRecordId(null)}
-          className="p-1 text-slate-400 hover:text-white rounded cursor-pointer text-xs"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="text-[11px] text-slate-400 mb-1.5">
-        คลิกเลือกเพื่อเปลี่ยนสถานะคำสั่งนี้ทันที:
-      </div>
-
-      <div className="grid grid-cols-2 gap-1.5 mb-2.5 max-h-48 overflow-y-auto pr-1">
-        {STANDARD_POLICE_STATUSES.map((st) => (
-          <button
-            key={st.label}
-            type="button"
-            onClick={() => {
-              onSaveInlineEdit(rec.id, { statusBadge: st.label });
-              setQuickStatusRecordId(null);
-            }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold border cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${st.color} ${
-              (rec.statusBadge || getStatusBadge(rec).badge) === st.label ? 'ring-2 ring-amber-400 font-bold' : ''
-            }`}
-          >
-            <span className={`w-2 h-2 rounded-full ${st.dot} shrink-0`} />
-            <span className="truncate">{st.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="pt-2 border-t border-slate-800">
-        <label className="block text-[10.5px] font-medium text-slate-300 mb-1">
-          หรือระบุข้อความสถานะเอง:
-        </label>
-        <div className="flex items-center gap-1">
-          <input
-            type="text"
-            value={customStatusInput}
-            onChange={(e) => setCustomStatusInput(e.target.value)}
-            placeholder="เช่น ระงับสิทธิ์, รอผล ก.ตร."
-            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && customStatusInput.trim()) {
-                onSaveInlineEdit(rec.id, { statusBadge: customStatusInput.trim() });
-                setQuickStatusRecordId(null);
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (customStatusInput.trim()) {
-                onSaveInlineEdit(rec.id, { statusBadge: customStatusInput.trim() });
-                setQuickStatusRecordId(null);
-              }
-            }}
-            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded cursor-pointer shadow-xs"
-          >
-            บันทึก
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[10.5px]">
-        <button
-          type="button"
-          onClick={() => {
-            const isSec = rec.notes?.includes('(ลับ)');
-            const newNotes = isSec
-              ? rec.notes.replace('(ลับ)', '').trim()
-              : `${rec.notes || ''} (ลับ)`.trim();
-            onSaveInlineEdit(rec.id, { notes: newNotes });
-          }}
-          className="flex items-center gap-1 px-2 py-0.5 rounded bg-purple-950/60 border border-purple-700/60 text-purple-300 hover:bg-purple-900 cursor-pointer"
-        >
-          <Lock className="w-2.5 h-2.5" />
-          <span>{rec.notes?.includes('(ลับ)') ? 'ปลดสถานะ (ลับ)' : 'ตั้งเป็นเอกสาร (ลับ)'}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            onSaveInlineEdit(rec.id, { statusBadge: '' });
-            setQuickStatusRecordId(null);
-          }}
-          title="คืนค่าเป็นสถานะอัตโนมัติตามข้อมูลคำสั่ง"
-          className="text-slate-400 hover:text-slate-200 underline cursor-pointer text-[10px]"
-        >
-          คืนค่าอัตโนมัติ
-        </button>
-      </div>
-    </div>
-  );
-
   // Pagination
   const [pageSize, setPageSize] = useState<number>(50);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -884,26 +762,15 @@ export const DataTable: React.FC<DataTableProps> = ({
                         </td>
 
                         {/* 8. สถานะ */}
-                        <td className={`${cellPad} text-center border-r border-slate-200 dark:border-slate-800/80 whitespace-nowrap relative`}>
-                          <div className="inline-block relative">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuickStatusRecordId(quickStatusRecordId === record.id ? null : record.id);
-                                setCustomStatusInput(record.statusBadge || status.badge);
-                              }}
-                              title="คลิกเพื่อแก้ไขสถานะสากล (แก้ไขได้ทุกคำสั่ง)"
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border shadow-2xs cursor-pointer transition-transform active:scale-95 hover:ring-2 hover:ring-amber-400/50 ${
-                                isDarkMode ? status.darkColor : status.lightColor
-                              }`}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-                              <span>{status.badge}</span>
-                              <Edit3 className="w-2.5 h-2.5 opacity-60 ml-0.5" />
-                            </button>
-
-                            {quickStatusRecordId === record.id && renderQuickStatusPopover(record)}
-                          </div>
+                        <td className={`${cellPad} text-center border-r border-slate-200 dark:border-slate-800/80 whitespace-nowrap`}>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold border shadow-2xs ${
+                              isDarkMode ? status.darkColor : status.lightColor
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                            {status.badge}
+                          </span>
                         </td>
 
                         {/* 9. จัดการ */}
@@ -1554,24 +1421,15 @@ export const DataTable: React.FC<DataTableProps> = ({
                           </div>
                         </div>
                       ) : (
-                        <div className="flex flex-wrap items-center gap-1 relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setQuickStatusRecordId(quickStatusRecordId === record.id ? null : record.id);
-                              setCustomStatusInput(record.statusBadge || status.badge);
-                            }}
-                            title="คลิกเพื่อแก้ไขสถานะสากล (แก้ไขได้ทุกคำสั่ง)"
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border shadow-xs cursor-pointer transition-transform active:scale-95 hover:ring-2 hover:ring-amber-400/50 ${
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border shadow-xs ${
                               isDarkMode ? status.darkColor : status.lightColor
                             }`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-                            <span>{status.badge}</span>
-                            <Edit3 className="w-2.5 h-2.5 opacity-60 ml-0.5" />
-                          </button>
-
-                          {quickStatusRecordId === record.id && renderQuickStatusPopover(record)}
+                            {status.badge}
+                          </span>
 
                           {isSecret && (
                             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-500/20 dark:text-purple-300 dark:border-purple-500/40">
