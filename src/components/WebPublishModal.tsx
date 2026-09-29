@@ -12,15 +12,17 @@ import {
   Server, 
   Sparkles,
   ShieldCheck,
-  RotateCcw,
-  ArrowRight
+  FileSpreadsheet,
+  Layers
 } from 'lucide-react';
 import { PolicePositionRecord } from '../types/police';
 import { 
   formatThaiDateTime, 
   exportDatabaseBackupJson, 
-  parseDatabaseBackupJson 
+  parseDatabaseBackupJson,
+  clearBrowserCache
 } from '../utils/dataSync';
+import { INITIAL_POLICE_RECORDS } from '../data/initialData';
 
 interface WebPublishModalProps {
   isOpen: boolean;
@@ -28,16 +30,11 @@ interface WebPublishModalProps {
   records: PolicePositionRecord[];
   officerName: string;
   isDarkMode: boolean;
-  serverVersion: number;
-  serverLastPublishedAt: string | null;
-  serverLastPublishedBy: string | null;
-  serverTotalRecords: number;
-  hasUnpublishedChanges: boolean;
-  onPublishToWeb: (note?: string) => Promise<boolean>;
-  onPullFromServer: () => Promise<boolean>;
-  onClearCacheAndReload: () => void;
-  onResetData: () => void;
+  totalRecords: number;
+  onResetToOfficialData: () => void;
+  onClearCache: () => void;
   onImportBackup: (backupRecords: PolicePositionRecord[]) => void;
+  onExportExcel: () => void;
 }
 
 export const WebPublishModal: React.FC<WebPublishModalProps> = ({
@@ -46,63 +43,18 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
   records,
   officerName,
   isDarkMode,
-  serverVersion,
-  serverLastPublishedAt,
-  serverLastPublishedBy,
-  serverTotalRecords,
-  hasUnpublishedChanges,
-  onPublishToWeb,
-  onPullFromServer,
-  onClearCacheAndReload,
-  onResetData,
+  totalRecords,
+  onResetToOfficialData,
+  onClearCache,
   onImportBackup,
+  onExportExcel,
 }) => {
-  const [publishNote, setPublishNote] = useState('');
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [isPulling, setIsPulling] = useState(false);
-  const [publishSuccessMsg, setPublishSuccessMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
-
-  const handlePublish = async () => {
-    setIsPublishing(true);
-    setErrorMsg(null);
-    setPublishSuccessMsg(null);
-    try {
-      const ok = await onPublishToWeb(publishNote.trim() || undefined);
-      if (ok) {
-        setPublishSuccessMsg('เผยแพร่ข้อมูลตารางลงเว็ปสำเร็จเรียบร้อย! ข้อมูลล่าสุดพร้อมใช้งานสำหรับทุกคน');
-        setPublishNote('');
-      } else {
-        setErrorMsg('การเผยแพร่ข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-      }
-    } catch (e: any) {
-      setErrorMsg(e.message || 'เกิดข้อผิดพลาดในการเผยแพร่');
-    } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  const handlePull = async () => {
-    setIsPulling(true);
-    setErrorMsg(null);
-    setPublishSuccessMsg(null);
-    try {
-      const ok = await onPullFromServer();
-      if (ok) {
-        setPublishSuccessMsg('ดึงข้อมูลล่าสุดจากเว็ปมาอัปเดตบนหน้าจอเรียบร้อยแล้ว');
-      } else {
-        setErrorMsg('ไม่สามารถดึงข้อมูลจากเซิร์ฟเวอร์ได้');
-      }
-    } catch (e: any) {
-      setErrorMsg(e.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
-    } finally {
-      setIsPulling(false);
-    }
-  };
 
   const handleBackupUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,12 +62,26 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
     try {
       const importedRecords = await parseDatabaseBackupJson(file);
       onImportBackup(importedRecords);
-      setPublishSuccessMsg(`นำเข้าข้อมูลสำรองจำนวน ${importedRecords.length} รายการ เรียบร้อยแล้ว (อย่าลืมกดเผยแพร่ลงเว็ปเพื่อบันทึกลงระบบ)`);
+      setSuccessMsg(`นำเข้าข้อมูลสำรองจำนวน ${importedRecords.length} รายการ เรียบร้อยแล้ว`);
+      setErrorMsg(null);
     } catch (err: any) {
       setErrorMsg(err.message || 'ไฟล์สำรองข้อมูลไม่ถูกต้อง');
+      setSuccessMsg(null);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleSyncOfficial = () => {
+    onResetToOfficialData();
+    setSuccessMsg(`อัปเดตข้อมูลเป็นชุดทางการล่าสุด ${INITIAL_POLICE_RECORDS.length} ตำแหน่ง เรียบร้อยแล้ว`);
+    setErrorMsg(null);
+  };
+
+  const handleClearCacheAndReset = () => {
+    onClearCache();
+    setSuccessMsg(`ล้างแคชเครื่องและโหลดข้อมูลทางการล่าสุด ${INITIAL_POLICE_RECORDS.length} ตำแหน่ง เรียบร้อยแล้ว`);
+    setErrorMsg(null);
   };
 
   return (
@@ -130,17 +96,17 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
         <div className="px-6 py-4 border-b border-rose-900/40 bg-gradient-to-r from-[#3b0810] via-[#5c0e1a] to-[#3b0810] text-white flex items-center justify-between shrink-0 shadow-md">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-300/40 flex items-center justify-center shadow-inner">
-              <Globe className="w-5 h-5 text-amber-300 animate-spin-slow" />
+              <Globe className="w-5 h-5 text-amber-300" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <span>ระบบเผยแพร่และอัปเดตข้อมูลตารางลงเว็ป</span>
+                <span>ระบบจัดการและอัปเดตฐานข้อมูลตารางลงเว็ป</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400/40">
-                  Web Sync Center
+                  Data Sync Center
                 </span>
               </h2>
               <p className="text-xs text-rose-200/90">
-                ซิงค์ข้อมูลทำเนียบกำลังพลระหว่างเครื่องและเซิร์ฟเวอร์กลาง เพื่อให้เว็ปแสดงข้อมูลชุดล่าสุดเสมอ
+                ข้อมูลทำเนียบกำลังพล ๑๓ กลุ่มกรณี ได้รับการบรรจุเข้าสู่ระบบเว็ปไซต์หลักเรียบร้อยแล้ว
               </p>
             </div>
           </div>
@@ -156,10 +122,10 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
         <div className="p-6 overflow-y-auto space-y-5 text-xs sm:text-sm">
           
           {/* Notifications */}
-          {publishSuccessMsg && (
+          {successMsg && (
             <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5 animate-in fade-in duration-200">
               <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-              <div className="flex-1 font-medium">{publishSuccessMsg}</div>
+              <div className="flex-1 font-medium">{successMsg}</div>
             </div>
           )}
 
@@ -177,136 +143,71 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
             <div className="text-xs font-bold text-amber-500 mb-3 flex items-center justify-between">
               <span className="flex items-center gap-1.5 uppercase tracking-wide">
                 <Server className="w-3.5 h-3.5 text-amber-500" />
-                สถานะระบบฐานข้อมูลบนเว็ป (Web Server Status)
+                สถานะฐานข้อมูลทำเนียบกำลังพลบนเว็ป (Master Database)
               </span>
               <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
-                ออนไลน์ พร้อมใช้งาน
+                อัปเดตล่าสุดพร้อมใช้งาน
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="space-y-1">
-                <div className="text-slate-400">เวอร์ชันข้อมูลบนเว็ป:</div>
+                <div className="text-slate-400">เวอร์ชันฐานข้อมูลในระบบ:</div>
                 <div className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
                   <Database className="w-4 h-4 text-blue-500" />
-                  <span>Version {serverVersion || 1}</span>
+                  <span>รุ่นปี ๒๕๖๙ (๕๔๕ ตำแหน่ง ๑๓ หมวด)</span>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="text-slate-400">จำนวนข้อมูลบนเว็ป:</div>
+                <div className="text-slate-400">จำนวนตำแหน่งปัจจุบันในตาราง:</div>
                 <div className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                  <span>{serverTotalRecords || records.length} ตำแหน่ง</span>
+                  <span>{records.length} ตำแหน่ง</span>
                 </div>
               </div>
 
               <div className="space-y-1 sm:col-span-2 pt-1 border-t border-slate-200 dark:border-slate-800">
-                <div className="text-slate-400">เผยแพร่ครั้งล่าสุดเมื่อ:</div>
-                <div className="font-medium text-slate-700 dark:text-slate-200">
-                  {formatThaiDateTime(serverLastPublishedAt)}
+                <div className="text-slate-400">ชุดข้อมูลมาตรฐาน:</div>
+                <div className="font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-amber-500" />
+                  <span>ข้อมูลสมบูรณ์จากไฟล์ "กันตำแหน่งทุกกรณี งานประทวน 1.xlsx" (๕๔๕ รายการ)</span>
                 </div>
-                {serverLastPublishedBy && (
-                  <div className="text-[11px] text-slate-400">
-                    โดย: <span className="text-amber-500">{serverLastPublishedBy}</span>
-                  </div>
-                )}
               </div>
-            </div>
-
-            {/* Current Local State Badge */}
-            <div className={`mt-3.5 p-2.5 rounded-lg border text-xs flex items-center justify-between ${
-              hasUnpublishedChanges 
-                ? 'bg-amber-500/10 border-amber-500/40 text-amber-800 dark:text-amber-300'
-                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
-            }`}>
-              <div className="flex items-center gap-2">
-                {hasUnpublishedChanges ? (
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                )}
-                <span>
-                  {hasUnpublishedChanges 
-                    ? `มีการเปลี่ยนแปลงข้อมูลในตาราง (${records.length} ตำแหน่ง) ที่ยังไม่ได้เผยแพร่ลงเว็ป`
-                    : `ข้อมูลในเครื่องตรงกับข้อมูลล่าสุดบนเว็ปแล้ว (${records.length} ตำแหน่ง)`
-                  }
-                </span>
-              </div>
-              <span className="font-bold px-2 py-0.5 rounded text-[10px] bg-black/20">
-                {hasUnpublishedChanges ? 'รอเผยแพร่' : 'ซิงค์แล้ว'}
-              </span>
             </div>
           </div>
 
-          {/* Section 1: Publish Now to Web (Primary Action) */}
+          {/* Section 1: Update to Latest Official 545 Records */}
           <div className="space-y-2">
             <label className="block font-bold text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
-              ๑. บันทึกและเผยแพร่ข้อมูลลงเว็ป (Publish to Web)
+              ๑. อัปเดตหรือกู้คืนเป็นชุดข้อมูลทางการ ๕๔๕ ตำแหน่งล่าสุด
             </label>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              เมื่อกดปุ่มนี้ ข้อมูลตารางทั้งหมด {records.length} รายการ (รวมรายการที่เพิ่ม แก้ไข หรือนำเข้าจาก Excel) จะถูกจัดเก็บลงฐานข้อมูลกลางของเว็ปไซต์ทันที ผู้ใช้ทุกคนที่เปิดแอปจะได้รับข้อมูลชุดใหม่นี้
+              หากหน้าจอของท่านแสดงข้อมูลเก่า หรือต้องการดึงข้อมูลทางการ ๕๔๕ ตำแหน่ง (ครบ ๑๓ กลุ่มกรณี) กลับคืนมา สามารถกดปุ่มนี้เพื่อซิงค์ได้ทันที
             </p>
 
-            <div className="space-y-2 pt-1">
-              <input
-                type="text"
-                value={publishNote}
-                onChange={(e) => setPublishNote(e.target.value)}
-                placeholder="ระบุหมายเหตุการเผยแพร่ เช่น 'อัปเดตข้อมูล นสต. และคำสั่งย้าย 29 ก.ย. 69' (ไม่บังคับ)"
-                className={`w-full px-3 py-2 rounded-lg text-xs border outline-none font-['Sarabun'] ${
-                  isDarkMode 
-                    ? 'bg-black/50 border-rose-900/60 focus:border-amber-400 text-white' 
-                    : 'bg-white border-slate-300 focus:border-rose-600 text-slate-900'
-                }`}
-              />
-
-              <button
-                onClick={handlePublish}
-                disabled={isPublishing}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold text-sm shadow-[0_4px_16px_rgba(251,191,36,0.35)] border border-amber-300 flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
-              >
-                {isPublishing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>กำลังบันทึกและเผยแพร่ข้อมูลลงเว็ป...</span>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud className="w-5 h-5 text-slate-950" />
-                    <span>🚀 บันทึกและเผยแพร่ข้อมูลลงเว็ปทันที ({records.length} ตำแหน่ง)</span>
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              onClick={handleSyncOfficial}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold text-sm shadow-[0_4px_16px_rgba(251,191,36,0.35)] border border-amber-300 flex items-center justify-center gap-2 cursor-pointer transition-all"
+            >
+              <RefreshCw className="w-4 h-4 text-slate-950" />
+              <span>ดึงและอัปเดตเป็นฐานข้อมูลทางการล่าสุด ({INITIAL_POLICE_RECORDS.length} ตำแหน่ง)</span>
+            </button>
           </div>
 
-          {/* Section 2: Sync / Pull from Server & Clear Local Cache */}
+          {/* Section 2: Clear Stale Cache */}
           <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
             <label className="block font-bold text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
-              ๒. การดึงข้อมูลและแก้ไขปัญหาแคชค้าง (Sync & Cache Troubleshooting)
+              ๒. แก้ไขปัญหาแคชเบราว์เซอร์ค้าง (Troubleshooting)
             </label>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              หากเปิดเว็ปแล้วข้อมูลยังไม่อัปเดตเนื่องจากเบราว์เซอร์จำข้อมูลเดิมไว้ ท่านสามารถกดดึงข้อมูลล่าสุดหรือล้างแคชได้ที่นี่
+              หากเบราว์เซอร์ยังคงจดจำข้อมูลเก่าไว้จากครั้งก่อน ให้กดปุ่ม "ล้างแคชเครื่องและโหลดใหม่" เพื่อบังคับให้เบราว์เซอร์รับข้อมูลชุดใหม่ ๕๔๕ รายการ
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
               <button
-                onClick={handlePull}
-                disabled={isPulling}
-                className={`px-3 py-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                  isDarkMode 
-                    ? 'bg-rose-950/40 border-rose-900/60 hover:bg-rose-900/50 text-rose-200' 
-                    : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-800'
-                }`}
-              >
-                <DownloadCloud className="w-4 h-4 text-blue-400" />
-                <span>ดึงข้อมูลล่าสุดจากเว็ป</span>
-              </button>
-
-              <button
-                onClick={onClearCacheAndReload}
+                onClick={handleClearCacheAndReset}
                 className={`px-3 py-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                   isDarkMode 
                     ? 'bg-rose-950/40 border-rose-900/60 hover:bg-rose-900/50 text-amber-300' 
@@ -315,6 +216,18 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
               >
                 <RefreshCw className="w-4 h-4 text-amber-500" />
                 <span>ล้างแคชเครื่องและโหลดใหม่</span>
+              </button>
+
+              <button
+                onClick={onExportExcel}
+                className={`px-3 py-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  isDarkMode 
+                    ? 'bg-rose-950/40 border-rose-900/60 hover:bg-rose-900/50 text-emerald-300' 
+                    : 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                <span>ส่งออกตาราง Excel 13 หมวด</span>
               </button>
             </div>
           </div>
@@ -335,7 +248,7 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
                 }`}
               >
                 <FileJson className="w-4 h-4 text-emerald-500" />
-                <span>ดาวน์โหลดสำรอง JSON</span>
+                <span>ดาวน์โหลดสำรอง JSON ({records.length} รายการ)</span>
               </button>
 
               <button
@@ -365,12 +278,9 @@ export const WebPublishModal: React.FC<WebPublishModalProps> = ({
         <div className={`px-6 py-3 border-t flex items-center justify-between text-xs shrink-0 ${
           isDarkMode ? 'bg-black/40 border-rose-950 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-500'
         }`}>
-          <button
-            onClick={onResetData}
-            className="text-rose-500 hover:text-rose-400 font-medium underline cursor-pointer"
-          >
-            คืนค่าเริ่มต้น (54 รายการ)
-          </button>
+          <div className="text-[11px] text-slate-400">
+            ระบบฐานข้อมูลทำเนียบกำลังพล อต. ตร. (งานประทวน ๑)
+          </div>
 
           <button
             onClick={onClose}

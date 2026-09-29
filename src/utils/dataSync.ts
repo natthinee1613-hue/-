@@ -1,139 +1,51 @@
 import { PolicePositionRecord } from '../types/police';
-
-export interface ServerSyncResponse {
-  success: boolean;
-  version: number;
-  lastPublishedAt: string;
-  lastPublishedBy?: string;
-  totalRecords: number;
-  records: PolicePositionRecord[];
-}
-
-export interface PublishResult {
-  success: boolean;
-  version?: number;
-  lastPublishedAt?: string;
-  message?: string;
-  error?: string;
-}
+import { APP_DATA_VERSION, INITIAL_POLICE_RECORDS } from '../data/initialData';
 
 export const STORAGE_KEY = 'police_position_master_records_v2';
 export const LOCAL_VERSION_KEY = 'police_position_data_version';
-export const LAST_PUBLISHED_KEY = 'police_position_last_published';
+export const LAST_UPDATED_KEY = 'police_position_last_updated';
 
 /**
- * Fetch the latest records published on the server
+ * Load records with smart version checking:
+ * If the user's localStorage contains an older version or doesn't have the 545 records dataset,
+ * automatically migrate and load the fresh INITIAL_POLICE_RECORDS dataset!
  */
-export async function fetchServerRecords(): Promise<ServerSyncResponse | null> {
+export function getStoredRecords(): PolicePositionRecord[] {
+  if (typeof window === 'undefined') return INITIAL_POLICE_RECORDS;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const storedVersion = localStorage.getItem(LOCAL_VERSION_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
 
-    const res = await fetch('/api/records', {
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-      },
-      cache: 'no-store', // Always get fresh data
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      throw new Error(`Server returned status ${res.status}`);
+    // If version matches and data is valid
+    if (storedVersion === APP_DATA_VERSION && raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
 
-    const data = await res.json();
-    if (data.success && Array.isArray(data.records)) {
-      return data as ServerSyncResponse;
-    }
-    return null;
+    // Older version or no data found: update cache to latest official records (545 items)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_POLICE_RECORDS));
+    localStorage.setItem(LOCAL_VERSION_KEY, APP_DATA_VERSION);
+    localStorage.setItem(LAST_UPDATED_KEY, new Date().toISOString());
+    return INITIAL_POLICE_RECORDS;
   } catch (err) {
-    console.warn('[DataSync] Could not fetch server records, falling back to local storage:', err);
-    return null;
+    console.error('[DataSync] Error loading records from localStorage:', err);
+    return INITIAL_POLICE_RECORDS;
   }
 }
 
 /**
- * Publish updated records to the web server
+ * Save records to local storage
  */
-export async function publishRecordsToWeb(
-  records: PolicePositionRecord[],
-  officerName: string,
-  note?: string
-): Promise<PublishResult> {
+export function saveStoredRecords(records: PolicePositionRecord[]): void {
+  if (typeof window === 'undefined') return;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-    const res = await fetch('/api/records/publish', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        records,
-        publishedBy: officerName,
-        note: note || `เผยแพร่อัปเดตข้อมูลตารางลงเว็ป (${records.length} รายการ)`,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      return { success: false, error: `HTTP ${res.status}: ${errorText}` };
-    }
-
-    const result = await res.json();
-    if (result.success) {
-      // Save last published timestamp locally
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-        localStorage.setItem(LOCAL_VERSION_KEY, String(result.version));
-        localStorage.setItem(LAST_PUBLISHED_KEY, result.lastPublishedAt);
-      }
-      return {
-        success: true,
-        version: result.version,
-        lastPublishedAt: result.lastPublishedAt,
-        message: result.message || 'เผยแพร่ข้อมูลลงเว็ปเรียบร้อยแล้ว',
-      };
-    }
-
-    return { success: false, error: result.error || 'การเผยแพร่ข้อมูลไม่สำเร็จ' };
-  } catch (err: any) {
-    console.error('[DataSync] Error publishing records to web:', err);
-    return {
-      success: false,
-      error: err.name === 'AbortError' ? 'หมดเวลาเชื่อมต่อกับเซิร์ฟเวอร์' : (err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ'),
-    };
-  }
-}
-
-/**
- * Reset server records to initial default
- */
-export async function resetServerRecords(): Promise<PolicePositionRecord[] | null> {
-  try {
-    const res = await fetch('/api/records/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && Array.isArray(data.records)) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data.records));
-          localStorage.setItem(LOCAL_VERSION_KEY, '1');
-          localStorage.setItem(LAST_PUBLISHED_KEY, data.lastPublishedAt);
-        }
-        return data.records;
-      }
-    }
-    return null;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    localStorage.setItem(LOCAL_VERSION_KEY, APP_DATA_VERSION);
+    localStorage.setItem(LAST_UPDATED_KEY, new Date().toISOString());
   } catch (err) {
-    console.error('[DataSync] Failed to reset server records:', err);
-    return null;
+    console.error('[DataSync] Error saving records to localStorage:', err);
   }
 }
 
@@ -141,7 +53,7 @@ export async function resetServerRecords(): Promise<PolicePositionRecord[] | nul
  * Format ISO date string into readable Thai datetime
  */
 export function formatThaiDateTime(isoString?: string | null): string {
-  if (!isoString) return 'ยังไม่มีข้อมูลการเผยแพร่';
+  if (!isoString) return 'ปรับปรุงล่าสุด: ๒๙ กันยายน ๒๕๖๙';
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
@@ -168,7 +80,7 @@ export function exportDatabaseBackupJson(records: PolicePositionRecord[]): void 
   const payload = {
     exportedAt: new Date().toISOString(),
     system: 'ระบบบริหารจัดการข้อมูลการกันตำแหน่งข้าราชการตำรวจ (งานประทวน 1)',
-    version: '2.0',
+    version: APP_DATA_VERSION,
     totalRecords: records.length,
     records,
   };
@@ -180,7 +92,7 @@ export function exportDatabaseBackupJson(records: PolicePositionRecord[]): void 
   const d = new Date();
   const dateStr = `${d.getFullYear()+543}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
   link.href = url;
-  link.download = `สำรองข้อมูลทำเนียบกำลังพล_อต_ตร_${dateStr}.json`;
+  link.download = `สำรองข้อมูลทำเนียบกำลังพล_อต_ตร_${records.length}_ตำแหน่ง_${dateStr}.json`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -221,16 +133,21 @@ export function parseDatabaseBackupJson(file: File): Promise<PolicePositionRecor
 }
 
 /**
- * Force clear local storage cache
+ * Force clear local storage cache and reload official initial records
  */
-export function clearBrowserCache(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem('police_position_master_records_v1');
-    localStorage.removeItem(LOCAL_VERSION_KEY);
-    localStorage.removeItem(LAST_PUBLISHED_KEY);
-  } catch (e) {
-    console.error('Failed to clear local cache', e);
+export function clearBrowserCache(): PolicePositionRecord[] {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('police_position_master_records_v1');
+      localStorage.removeItem(LOCAL_VERSION_KEY);
+      localStorage.removeItem(LAST_UPDATED_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_POLICE_RECORDS));
+      localStorage.setItem(LOCAL_VERSION_KEY, APP_DATA_VERSION);
+      localStorage.setItem(LAST_UPDATED_KEY, new Date().toISOString());
+    } catch (e) {
+      console.error('Failed to clear local cache', e);
+    }
   }
+  return INITIAL_POLICE_RECORDS;
 }

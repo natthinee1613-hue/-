@@ -14,7 +14,7 @@ import {
   Video,
   Sparkles,
   Globe,
-  UploadCloud
+  Database
 } from 'lucide-react';
 import { getCurrentOfficerName, setCurrentOfficerName } from '../utils/auditLogger';
 import { MaroonAnimatedBackground } from './MaroonAnimatedBackground';
@@ -26,9 +26,6 @@ interface HeaderProps {
   onOpenPrintModal: () => void;
   onOpenVeoModal: () => void;
   onOpenPublishModal: () => void;
-  hasUnpublishedChanges: boolean;
-  serverVersion: number;
-  serverLastPublishedAt: string | null;
   onExportExcel: () => void;
   onDownloadTemplate: () => void;
   onResetData: () => void;
@@ -45,9 +42,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPrintModal,
   onOpenVeoModal,
   onOpenPublishModal,
-  hasUnpublishedChanges,
-  serverVersion,
-  serverLastPublishedAt,
   onExportExcel,
   onDownloadTemplate,
   onResetData,
@@ -80,25 +74,17 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="border-b border-rose-950/60 bg-black/40 backdrop-blur-md py-1.5 px-3 sm:px-6 relative z-10">
         <div className="max-w-[1600px] mx-auto flex items-center justify-end gap-2 text-xs">
           <div className="flex items-center gap-2">
-            {/* Live Web Sync Status Pill */}
+            {/* Database Status Pill */}
             <button
               onClick={onOpenPublishModal}
-              title={hasUnpublishedChanges ? 'มีข้อมูลในตารางรอเผยแพร่ลงเว็ป คลิกเพื่อบันทึกและเผยแพร่' : 'ข้อมูลในเครื่องซิงค์ตรงกับเว็ปล่าสุดแล้ว คลิกเพื่อดูรายละเอียดหรือจัดการ'}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer shadow-xs font-['Sarabun'] ${
-                hasUnpublishedChanges
-                  ? 'bg-amber-950/85 hover:bg-amber-900 border-amber-500/60 text-amber-200'
-                  : 'bg-emerald-950/75 hover:bg-emerald-900 border-emerald-500/50 text-emerald-200'
-              }`}
+              title="ตรวจสอบและจัดการฐานข้อมูล ๕๔๕ ตำแหน่ง"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer shadow-xs font-['Sarabun'] bg-emerald-950/75 hover:bg-emerald-900 border-emerald-500/50 text-emerald-200"
             >
-              <Globe className={`w-3.5 h-3.5 ${hasUnpublishedChanges ? 'text-amber-400' : 'text-emerald-400'}`} />
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
               <span className="font-medium hidden sm:inline">
-                {hasUnpublishedChanges ? 'เว็ป: รอเผยแพร่' : `เว็ป: ซิงค์แล้ว (v${serverVersion || 1})`}
+                ฐานข้อมูล: {totalRecords} ตำแหน่ง
               </span>
-              {hasUnpublishedChanges ? (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block" />
-              ) : (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              )}
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
             </button>
 
             {/* Current Officer Badge */}
@@ -292,21 +278,14 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
 
-            {/* Web Publish Action Button */}
+            {/* Database Management Action Button */}
             <button
               onClick={onOpenPublishModal}
-              title="บันทึกและเผยแพร่ข้อมูลตารางลงเว็ป เพื่อให้ทุกคนที่เปิดเว็ปไซต์เห็นข้อมูลล่าสุด"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-md ${
-                hasUnpublishedChanges
-                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white border-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.5)]'
-                  : 'border-rose-900/60 bg-[#3b0810]/80 hover:bg-[#540d17] hover:border-rose-400/50 text-rose-100 hover:text-white'
-              }`}
+              title="จัดการและตรวจสอบฐานข้อมูล ๕๔๕ ตำแหน่ง และสำรอง/กู้คืนข้อมูล"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer shadow-md border-rose-900/60 bg-[#3b0810]/80 hover:bg-[#540d17] hover:border-rose-400/50 text-rose-100 hover:text-white"
             >
-              <UploadCloud className="w-3.5 h-3.5 text-emerald-300" />
-              <span>เผยแพร่ลงเว็ป</span>
-              {hasUnpublishedChanges && (
-                <span className="w-2 h-2 rounded-full bg-amber-300 animate-ping ml-0.5" />
-              )}
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>ฐานข้อมูล</span>
             </button>
 
             {/* Primary Action Button: + เพิ่มรายการ */}

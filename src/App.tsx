@@ -30,13 +30,12 @@ import { PrintReportModal } from './components/PrintReportModal';
 import { VeoVideoModal } from './components/VeoVideoModal';
 import { WebPublishModal } from './components/WebPublishModal';
 import { 
-  fetchServerRecords, 
-  publishRecordsToWeb, 
-  resetServerRecords, 
+  getStoredRecords, 
+  saveStoredRecords, 
   clearBrowserCache,
   STORAGE_KEY,
   LOCAL_VERSION_KEY,
-  LAST_PUBLISHED_KEY
+  LAST_UPDATED_KEY
 } from './utils/dataSync';
 
 const THEME_KEY = 'police_position_theme_mode';
@@ -57,22 +56,8 @@ export default function App() {
     });
   };
 
-  // Master records state
-  const [records, setRecords] = useState<PolicePositionRecord[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_POLICE_RECORDS;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load records from storage', e);
-    }
-    return INITIAL_POLICE_RECORDS;
-  });
+  // Master records state initialized with smart version checking (545 official records)
+  const [records, setRecords] = useState<PolicePositionRecord[]>(getStoredRecords);
 
   // Current selected category tab
   const [selectedCategory, setSelectedCategory] = useState<PoliceCategory | 'ALL'>('ให้ออกจากราชการไว้ก่อน');
@@ -105,47 +90,10 @@ export default function App() {
   const [isVeoModalOpen, setIsVeoModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
 
-  // Server Web Sync State
-  const [serverVersion, setServerVersion] = useState<number>(1);
-  const [serverLastPublishedAt, setServerLastPublishedAt] = useState<string | null>(null);
-  const [serverLastPublishedBy, setServerLastPublishedBy] = useState<string | null>(null);
-  const [serverTotalRecords, setServerTotalRecords] = useState<number>(INITIAL_POLICE_RECORDS.length);
-  const [lastSyncedJson, setLastSyncedJson] = useState<string>('');
-
-  // Fetch fresh published records from server on mount
+  // Sync state to localStorage on changes
   useEffect(() => {
-    let isMounted = true;
-    async function loadInitialServerData() {
-      try {
-        const serverData = await fetchServerRecords();
-        if (serverData && isMounted && Array.isArray(serverData.records) && serverData.records.length > 0) {
-          setRecords(serverData.records);
-          setServerVersion(serverData.version);
-          setServerLastPublishedAt(serverData.lastPublishedAt);
-          setServerLastPublishedBy(serverData.lastPublishedBy || null);
-          setServerTotalRecords(serverData.totalRecords);
-          setLastSyncedJson(JSON.stringify(serverData.records));
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData.records));
-          localStorage.setItem(LOCAL_VERSION_KEY, String(serverData.version));
-          localStorage.setItem(LAST_PUBLISHED_KEY, serverData.lastPublishedAt);
-        } else if (isMounted) {
-          setLastSyncedJson(JSON.stringify(records));
-        }
-      } catch (err) {
-        console.error('Failed to load server data on startup:', err);
-      }
-    }
-    loadInitialServerData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Track if there are unpublished changes compared to server
-  const hasUnpublishedChanges = useMemo(() => {
-    if (!lastSyncedJson) return false;
-    return JSON.stringify(records) !== lastSyncedJson;
-  }, [records, lastSyncedJson]);
+    saveStoredRecords(records);
+  }, [records]);
 
   // Officer name
   const [officerName, setOfficerName] = useState(getCurrentOfficerName());
@@ -438,94 +386,37 @@ export default function App() {
     showToast(summaryMessage);
   };
 
-  // Web Publishing Handler
-  const handlePublishToWeb = async (note?: string): Promise<boolean> => {
-    const res = await publishRecordsToWeb(records, officerName, note);
-    if (res.success) {
-      if (res.version) setServerVersion(res.version);
-      if (res.lastPublishedAt) setServerLastPublishedAt(res.lastPublishedAt);
-      setServerLastPublishedBy(officerName);
-      setServerTotalRecords(records.length);
-      setLastSyncedJson(JSON.stringify(records));
-
+  // Reset / sync to official 545 records
+  const handleResetToOfficialData = () => {
+    if (window.confirm(`คุณต้องการอัปเดตข้อมูลเป็นฐานข้อมูลทางการ ๕๔๕ ตำแหน่ง (ครบ ๑๓ กลุ่มกรณี) หรือไม่?`)) {
+      setRecords(INITIAL_POLICE_RECORDS);
+      saveStoredRecords(INITIAL_POLICE_RECORDS);
+      setSelectedIds([]);
       saveAuditLog({
         officerName,
-        action: 'PUBLISH_TO_WEB',
+        action: 'RESET_DATA',
         category: 'ALL',
-        fieldChanged: 'เผยแพร่ข้อมูลลงเว็ป',
-        newValue: `เวอร์ชัน ${res.version} (${records.length} รายการ)`,
-        details: note || `เผยแพร่ข้อมูลทำเนียบกำลังพลลงเว็ปสำเร็จ (${records.length} รายการ)`
+        fieldChanged: 'อัปเดตฐานข้อมูลทางการ',
+        newValue: `อัปเดตข้อมูลเป็นชุดทางการ ${INITIAL_POLICE_RECORDS.length} รายการ`,
+        details: `อัปเดตข้อมูลเป็นฐานข้อมูลทางการ ๕๔๕ ตำแหน่ง ครบ ๑๓ หมวดหมู่ สำเร็จ`
       });
-
-      showToast(`🚀 เผยแพร่อัปเดตข้อมูลตารางลงเว็ปสำเร็จ (เวอร์ชัน ${res.version}) ข้อมูลพร้อมใช้งานทันที`);
-      return true;
-    } else {
-      showToast(res.error || 'การเผยแพร่ข้อมูลลงเว็ปไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-      return false;
+      showToast(`อัปเดตเป็นฐานข้อมูลทางการ ${INITIAL_POLICE_RECORDS.length} ตำแหน่ง เรียบร้อยแล้ว`);
     }
   };
 
-  // Pull latest records from web server
-  const handlePullFromServer = async (): Promise<boolean> => {
-    const data = await fetchServerRecords();
-    if (data && Array.isArray(data.records)) {
-      setRecords(data.records);
-      setServerVersion(data.version);
-      setServerLastPublishedAt(data.lastPublishedAt);
-      setServerLastPublishedBy(data.lastPublishedBy || null);
-      setServerTotalRecords(data.totalRecords);
-      setLastSyncedJson(JSON.stringify(data.records));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data.records));
-      showToast(`ดึงข้อมูลล่าสุดจากเว็ปสำเร็จ (${data.records.length} ตำแหน่ง)`);
-      return true;
-    }
-    return false;
-  };
-
-  // Clear local browser cache and reload fresh data from web server
-  const handleClearCacheAndReload = async () => {
-    clearBrowserCache();
-    const data = await fetchServerRecords();
-    if (data && Array.isArray(data.records)) {
-      setRecords(data.records);
-      setServerVersion(data.version);
-      setServerLastPublishedAt(data.lastPublishedAt);
-      setServerLastPublishedBy(data.lastPublishedBy || null);
-      setServerTotalRecords(data.totalRecords);
-      setLastSyncedJson(JSON.stringify(data.records));
-      showToast('ล้างแคชเครื่องและโหลดข้อมูลล่าสุดจากเว็ปสำเร็จ');
-    } else {
-      setRecords(INITIAL_POLICE_RECORDS);
-      setLastSyncedJson(JSON.stringify(INITIAL_POLICE_RECORDS));
-      showToast('ล้างแคชเครื่องและคืนค่าข้อมูลเริ่มต้นสำเร็จ');
-    }
+  // Clear local browser cache and reload fresh data from official source
+  const handleClearCacheAndReload = () => {
+    const refreshed = clearBrowserCache();
+    setRecords(refreshed);
+    setSelectedIds([]);
+    showToast(`ล้างแคชเครื่องและโหลดข้อมูลทางการ ${refreshed.length} ตำแหน่ง เรียบร้อยแล้ว`);
   };
 
   // Import JSON Database Backup
   const handleImportBackup = (backupRecords: PolicePositionRecord[]) => {
     setRecords(backupRecords);
-    showToast(`นำเข้าไฟล์สำรองข้อมูล ${backupRecords.length} รายการ เรียบร้อยแล้ว (อย่าลืมกด "เผยแพร่ลงเว็ป" เพื่อบันทึกลงระบบ)`);
-  };
-
-  // Reset to original seed data
-  const handleResetData = async () => {
-    if (window.confirm('คุณต้องการรีเซ็ตข้อมูลทั้งหมดกลับเป็นชุดเริ่มต้น 54 รายการและข้อมูลตัวอย่าง 13 หมวด หรือไม่? (ข้อมูลบนเว็ปและเครื่องจะถูกรีเซ็ต)')) {
-      const resetResult = await resetServerRecords();
-      const freshRecords = resetResult || INITIAL_POLICE_RECORDS;
-      setRecords(freshRecords);
-      setSelectedIds([]);
-      setServerVersion(1);
-      setServerTotalRecords(freshRecords.length);
-      setLastSyncedJson(JSON.stringify(freshRecords));
-      saveAuditLog({
-        officerName,
-        action: 'RESET_DATA',
-        category: 'ALL',
-        fieldChanged: 'รีเซ็ตข้อมูลเริ่มต้น',
-        details: 'รีเซ็ตข้อมูลทั้งหมดเป็นค่าเริ่มต้น 54 รายการ'
-      });
-      showToast('รีเซ็ตข้อมูลตั้งต้น 54 รายการ เรียบร้อยแล้ว');
-    }
+    saveStoredRecords(backupRecords);
+    showToast(`นำเข้าไฟล์สำรองข้อมูล ${backupRecords.length} รายการ เรียบร้อยแล้ว`);
   };
 
   return (
@@ -574,12 +465,9 @@ export default function App() {
         onOpenPrintModal={() => setIsPrintModalOpen(true)}
         onOpenVeoModal={() => setIsVeoModalOpen(true)}
         onOpenPublishModal={() => setIsPublishModalOpen(true)}
-        hasUnpublishedChanges={hasUnpublishedChanges}
-        serverVersion={serverVersion}
-        serverLastPublishedAt={serverLastPublishedAt}
         onExportExcel={() => exportToExcel(records, selectedCategory)}
         onDownloadTemplate={downloadTemplate}
-        onResetData={handleResetData}
+        onResetData={handleResetToOfficialData}
         currentCategory={selectedCategory}
         totalRecords={records.length}
         isDarkMode={isDarkMode}
@@ -732,16 +620,11 @@ export default function App() {
         records={records}
         officerName={officerName}
         isDarkMode={isDarkMode}
-        serverVersion={serverVersion}
-        serverLastPublishedAt={serverLastPublishedAt}
-        serverLastPublishedBy={serverLastPublishedBy}
-        serverTotalRecords={serverTotalRecords}
-        hasUnpublishedChanges={hasUnpublishedChanges}
-        onPublishToWeb={handlePublishToWeb}
-        onPullFromServer={handlePullFromServer}
-        onClearCacheAndReload={handleClearCacheAndReload}
-        onResetData={handleResetData}
+        totalRecords={records.length}
+        onResetToOfficialData={handleResetToOfficialData}
+        onClearCache={handleClearCacheAndReload}
         onImportBackup={handleImportBackup}
+        onExportExcel={() => exportToExcel(records, selectedCategory)}
       />
 
     </div>
